@@ -264,11 +264,67 @@ namespace Rush
         }
     }
 
+	static void dx11_release_back_buffer(RenderDevice* dev)
+	{
+		SafeRelease(dev->depthstencil_dsv);
+		SafeRelease(dev->depthstencil_tex);
+
+		SafeRelease(dev->backbuffer_rtv);
+		SafeRelease(dev->backbuffer_tex);
+	}
+
+	static void dx11_acquire_back_buffer(RenderDevice* dev)
+	{
+		// Get default back buffer
+
+		D3D_CALL( dev->swap_chain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&dev->backbuffer_tex) );
+		D3D_CALL( dev->native->CreateRenderTargetView(dev->backbuffer_tex, NULL, &dev->backbuffer_rtv) );
+
+		// Create default depth buffer
+		// create depth stencil
+		D3D11_TEXTURE2D_DESC depth_stencil_desc;
+		depth_stencil_desc.Width = dev->window->width();
+		depth_stencil_desc.Height = dev->window->height();
+		depth_stencil_desc.MipLevels = 1;
+		depth_stencil_desc.ArraySize = 1;
+		depth_stencil_desc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+		depth_stencil_desc.SampleDesc.Count = 1;
+		depth_stencil_desc.SampleDesc.Quality = 0;
+		depth_stencil_desc.Usage = D3D11_USAGE_DEFAULT;
+		depth_stencil_desc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+		depth_stencil_desc.CPUAccessFlags = 0;
+		depth_stencil_desc.MiscFlags = 0;
+
+		D3D_CALL( dev->native->CreateTexture2D(&depth_stencil_desc, NULL, &dev->depthstencil_tex) );
+
+		// create depth stencil view
+		D3D11_DEPTH_STENCIL_VIEW_DESC depth_stencil_view_desc = CD3D11_DEPTH_STENCIL_VIEW_DESC();
+		depth_stencil_view_desc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+		depth_stencil_view_desc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
+		depth_stencil_view_desc.Texture2D.MipSlice = 0;
+		depth_stencil_view_desc.Flags = 0;
+
+		D3D_CALL( dev->native->CreateDepthStencilView(dev->depthstencil_tex, &depth_stencil_view_desc, &dev->depthstencil_dsv) );
+	}
+
+	static void dx11_setup_back_buffer(RenderDevice* dev)
+	{
+		dev->default_context->native->OMSetRenderTargets(1, &dev->backbuffer_rtv, dev->depthstencil_dsv);
+
+		D3D11_VIEWPORT viewport = CD3D11_VIEWPORT(dev->backbuffer_tex, dev->backbuffer_rtv);
+		dev->default_context->native->RSSetViewports(1, &viewport);
+
+		dev->default_context->current_rtv = dev->backbuffer_rtv;
+		dev->default_context->current_dsv = dev->depthstencil_dsv;
+	}
+
     RenderDevice* Gfx_CreateDevice(Window* window, const RenderDeviceConfig& cfg) 
     {
         (void)cfg; // TODO
 
         RenderDevice* dev = new RenderDevice;
+
+		dev->window = window;
 
         dev->vsync = cfg.use_vertical_sync ? 1 : 0;
 
@@ -346,46 +402,10 @@ namespace Rush
             D3D11_SDK_VERSION, &sd, &dev->swap_chain, &dev->native, 
             &supported_features, &dev->default_context->native) );
 
-        // Get default back buffer
-
-        D3D_CALL( dev->swap_chain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&dev->backbuffer_tex) );
-        D3D_CALL( dev->native->CreateRenderTargetView(dev->backbuffer_tex, NULL, &dev->backbuffer_rtv) );
-
-        // Create default depth buffer
-        // create depth stencil
-        D3D11_TEXTURE2D_DESC depth_stencil_desc;
-        depth_stencil_desc.Width = window->width();
-        depth_stencil_desc.Height = window->height();
-        depth_stencil_desc.MipLevels = 1;
-        depth_stencil_desc.ArraySize = 1;
-        depth_stencil_desc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-        depth_stencil_desc.SampleDesc.Count = 1;
-        depth_stencil_desc.SampleDesc.Quality = 0;
-        depth_stencil_desc.Usage = D3D11_USAGE_DEFAULT;
-        depth_stencil_desc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
-        depth_stencil_desc.CPUAccessFlags = 0;
-        depth_stencil_desc.MiscFlags = 0;
-
-        D3D_CALL( dev->native->CreateTexture2D(&depth_stencil_desc, NULL, &dev->depthstencil_tex) );
-
-        // create depth stencil view
-        D3D11_DEPTH_STENCIL_VIEW_DESC depth_stencil_view_desc = CD3D11_DEPTH_STENCIL_VIEW_DESC();
-        depth_stencil_view_desc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-        depth_stencil_view_desc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
-        depth_stencil_view_desc.Texture2D.MipSlice = 0;
-        depth_stencil_view_desc.Flags = 0;
-
-        D3D_CALL( dev->native->CreateDepthStencilView(dev->depthstencil_tex, &depth_stencil_view_desc, &dev->depthstencil_dsv) );
-
         // Set-up default Colour and Depth surfaces
 
-        dev->default_context->native->OMSetRenderTargets(1, &dev->backbuffer_rtv, dev->depthstencil_dsv);
-
-        D3D11_VIEWPORT viewport = CD3D11_VIEWPORT(dev->backbuffer_tex, dev->backbuffer_rtv);
-        dev->default_context->native->RSSetViewports(1, &viewport);
-
-        dev->default_context->current_rtv = dev->backbuffer_rtv;
-        dev->default_context->current_dsv = dev->depthstencil_dsv;
+		dx11_acquire_back_buffer(dev);
+		dx11_setup_back_buffer(dev);
 
         // create default pixel and vertex constant buffers
 
@@ -409,18 +429,19 @@ namespace Rush
 
         // all done
 
+		dev->resize_listener = new WindowResizeListener(window);
+
         return dev;
     }
 
     void Gfx_DestroyDevice(RenderDevice* dev)
     {
+		delete dev->resize_listener;
+		dev->resize_listener = NULL;
+
 		SafeRelease(dev->rasterizer_state);
 
-        SafeRelease(dev->depthstencil_dsv);
-        SafeRelease(dev->depthstencil_tex);
-
-        SafeRelease(dev->backbuffer_rtv);
-        SafeRelease(dev->backbuffer_tex);
+		dx11_release_back_buffer(dev);
 
         SafeRelease(dev->swap_chain);
 
@@ -477,6 +498,22 @@ namespace Rush
 
     void Gfx_Present(RenderDevice* dev)
     {
+		if( dev->resize_listener->size() )
+		{
+			const WindowEvent::Resize& last_resize = dev->resize_listener->back();
+			DXGI_SWAP_CHAIN_DESC desc;
+			dev->swap_chain->GetDesc(&desc);
+
+			dx11_release_back_buffer(dev);
+
+			D3D_CALL(dev->swap_chain->ResizeBuffers(desc.BufferCount, last_resize.width, last_resize.height, desc.BufferDesc.Format, desc.Flags));
+
+			dx11_acquire_back_buffer(dev);
+			dx11_setup_back_buffer(dev);
+
+			dev->resize_listener->clear();
+		}
+
         D3D_CALL( dev->swap_chain->Present(dev->vsync, 0) );
     }
 

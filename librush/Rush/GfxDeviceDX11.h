@@ -10,6 +10,8 @@
 #include "GfxBuffer.h"
 #include "GfxShader.h"
 
+#include "WindowEvents.h"
+
 #include <D3D11.h>
 #include <D3DX11.h>
 #include <D3Dcompiler.h>
@@ -17,6 +19,8 @@
 
 namespace Rush
 {
+	typedef WindowEvent::Listener<WindowEvent::Resize> WindowResizeListener;
+
     struct TextureDX11
     {
         TextureDX11() 
@@ -201,6 +205,9 @@ namespace Rush
         uint32                  vsync;
 
 		ID3D11RasterizerState*	rasterizer_state;
+
+		Window*					window;
+		WindowResizeListener*	resize_listener;
     };
 
 }
