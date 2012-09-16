@@ -401,6 +401,12 @@ namespace Rush
         D3D_CALL(dev->native->CreateBuffer(&desc, NULL, &dev->default_context->ps_cb));
         D3D_CALL(dev->native->CreateBuffer(&desc, NULL, &dev->default_context->vs_cb));
 
+		// Hack -- enable scissor rect state by default
+		D3D11_RASTERIZER_DESC rasterizer_desc = CD3D11_RASTERIZER_DESC(CD3D11_DEFAULT());
+		rasterizer_desc.ScissorEnable = TRUE;
+		dev->native->CreateRasterizerState(&rasterizer_desc, &dev->rasterizer_state);
+		dev->default_context->native->RSSetState(dev->rasterizer_state);
+
         // all done
 
         return dev;
@@ -408,6 +414,8 @@ namespace Rush
 
     void Gfx_DestroyDevice(RenderDevice* dev)
     {
+		SafeRelease(dev->rasterizer_state);
+
         SafeRelease(dev->depthstencil_dsv);
         SafeRelease(dev->depthstencil_tex);
 

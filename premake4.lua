@@ -18,8 +18,10 @@ solution "ReverseZ"
 	}
 
 	local config_list = {
-		"Release",
-		"Debug",
+		"DX9-Release",
+		"DX9-Debug",
+		"DX11-Release",
+		"DX11-Debug",
 	}
 	local platform_list = {
 		"x32", "x64"
@@ -37,14 +39,36 @@ solution "ReverseZ"
 	
 -- CONFIGURATIONS
 
-configuration "Release"
-	defines { "NDEBUG", "RUSH_DX9" }
+configuration "*-Release"
+	defines { "NDEBUG" }
 	flags { "Symbols", optimization_flags }
 
-configuration "Debug"
-	defines { "_DEBUG", "RUSH_DX9" }
+configuration "*-Debug"
+	defines { "_DEBUG" }
 	flags { "Symbols" }
-	targetsuffix ( "_d" )
+
+configuration "DX9-*"
+	defines {
+		"RUSH_DX9"
+	}
+	links { 
+		"d3d9", 
+		"d3dx9", 
+		"dxerr" 
+	}
+
+configuration "DX11-*"
+	defines {
+		"RUSH_DX11"
+	}
+	links { 
+		"d3d11", 
+		"d3dx11",
+		"dxerr",
+		"dxgi",
+		"dxguid",
+		"d3dcompiler"
+	}
 
 configuration "x32"
 	libdirs { "$(DXSDK_DIR)/Lib/x86" }
@@ -74,9 +98,4 @@ project "ReverseZ"
 		"source/**.*", 
 		"librush/Rush/**.h",
 		"librush/Rush/**.cpp",
-	}
-	links { 
-		"d3d9", 
-		"d3dx9", 
-		"dxerr" 
 	}

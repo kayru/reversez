@@ -199,6 +199,8 @@ namespace Rush
         ReferenceCount          refcount;
 
         uint32                  vsync;
+
+		ID3D11RasterizerState*	rasterizer_state;
     };
 
 }
